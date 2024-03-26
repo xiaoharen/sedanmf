@@ -4,6 +4,7 @@ from typing import Dict
 
 from karateclub import Estimator
 from sklearn.decomposition import NMF
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 class SEDANMF(Estimator):
@@ -19,6 +20,7 @@ class SEDANMF(Estimator):
         iterations (int): Number of training epochs. Default 1000.
         seed (int): Random seed value. Default is 42.
         lamb (float): Regularization parameter. Default 0.01.
+        span (int): The span of factorization. Default 2.
     """
 
     def __init__(
@@ -27,11 +29,13 @@ class SEDANMF(Estimator):
         iterations: int = 1000,
         seed: int = 42,
         lamb: float = 0.01,
+        span: int = 2
     ):
         self.pre_iterations = pre_iterations
         self.iterations = iterations
         self.seed = seed
         self.lamb = lamb
+        self.span = span
 
     def _set_layers(self):
         """
@@ -41,7 +45,7 @@ class SEDANMF(Estimator):
         temp = self._n
         while temp >= 2:
             self.layers.append(temp)
-            temp //= 2
+            temp //= self.span
         self._p = len(self.layers)
 
     def _setup_target_matrices(self, graph):
@@ -255,30 +259,8 @@ class SEDANMF(Estimator):
         """
         Building the similarity matrix
         """
-        w = np.zeros((self._n, self._n), dtype=float)
-        columns = np.zeros((self._n, self._n), dtype=float)
-        for i in range(self._n):
-            for j in range(self._n):
-                columns[i, j] = 0
-                w[i, j] = 0
-            w[i, i] = 1
-            columns[i, i] = 1
-        for edge in self._graph.edges():
-            w[edge[0], edge[1]] = 1
-            w[edge[1], edge[0]] = 1
-
-        self._S = []
-        for i in range(self._n):
-            temp = []
-            for j in range(self._n):
-                xi = w[i]
-                xj = columns[j]
-                sum_xi = np.sqrt(np.sum(xi ** 2))
-                sum_xj = np.sqrt(np.sum(xj ** 2))
-                sum_x = sum_xj * sum_xi
-                temp.append(np.sum((w[i, j]) * np.dot(xi, xj) / sum_x))
-            self._S.append(temp)
-        self._S = np.array(self._S)
+        G = nx.to_numpy_array(self._graph)
+        self._S = cosine_similarity(G)
         self._S_sqr = np.multiply(self._S, self._S)
 
     def _calculate_cost(self, i):
